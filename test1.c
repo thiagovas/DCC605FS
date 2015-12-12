@@ -102,7 +102,7 @@ void fs_free_check(struct superblock **sb, uint64_t fsize, uint64_t blksz)
 	if(!fp) { perror(NULL); exit(EXIT_FAILURE); }
 
 	lseek((*sb)->fd, (*sb)->freelist * blksz, SEEK_SET);
-	read((*sb)->fd, fp, blksz);
+	int ret=read((*sb)->fd, fp, blksz);
 
 	uint64_t blknum = fs_get_block(*sb);
 	while(blknum != 0 && blknum != ((uint64_t)-1)) {
@@ -121,8 +121,9 @@ void fs_free_check(struct superblock **sb, uint64_t fsize, uint64_t blksz)
 	fs_close(*sb);
 	*sb = fs_open(fname);
 	if((*sb)->freeblks != 0) printf("FAIL reopen sb->freeblks != 0\n");
-
-	for(uint64_t i = 0; i < numblocks; i++) {
+	
+	uint64_t i=0;
+	for(; i < numblocks; i++) {
 		if(!blkmap[i]) continue;
 		fs_put_block(*sb, i);
 	}
@@ -139,7 +140,7 @@ void fs_check(const struct superblock *sb, uint64_t fsize, uint64_t blksz)
 	if(!inode) { perror(NULL); exit(EXIT_FAILURE); }
 
 	lseek(sb->fd, sb->root * blksz, SEEK_SET);
-	read(sb->fd, inode, blksz);
+	int ret=read(sb->fd, inode, blksz);
 
 	if(inode->mode != IMDIR) { printf("FAIL root IMDIR\n"); }
 	if(inode->next != 0) { printf("FAIL root next\n"); }
@@ -148,7 +149,7 @@ void fs_check(const struct superblock *sb, uint64_t fsize, uint64_t blksz)
 	if(!info) { perror(NULL); exit(EXIT_FAILURE); }
 
 	lseek(sb->fd, inode->meta * blksz, SEEK_SET);
-	read(sb->fd, info, blksz);
+	ret=read(sb->fd, info, blksz);
 
 	if(info->size != 0) { printf("FAIL root size\n"); }
 	if(info->name[0] != '/' || info->name[1] != '\0') { printf("FAIL root name\n"); }
