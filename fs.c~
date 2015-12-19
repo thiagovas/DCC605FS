@@ -125,7 +125,7 @@ struct superblock * fs_format(const char *fname, uint64_t blocksize)
 
 /* Open the filesystem in =fname and return its superblock.  Returns NULL on
  * error, and sets errno accordingly.  If =fname does not contain a
- * 0xdcc605fs, then errno is set to EBADF. */
+ * 0xdcc605f5, then errno is set to EBADF. */
 struct superblock * fs_open(const char *fname)
 {
     int fd;
@@ -133,6 +133,11 @@ struct superblock * fs_open(const char *fname)
     fd = open(fname, O_RDWR, S_IWRITE | S_IREAD);
     if(read(fd, &retblock->magic, sizeof(uint64_t)) == -1){
     return;
+    }
+    else{
+        if(retblock->magic != 0xdcc605f5){
+        errno = EBADF;
+        }
     }
     if(read(fd, &retblock->blks, sizeof(uint64_t)) == -1){
     return;
@@ -149,19 +154,21 @@ struct superblock * fs_open(const char *fname)
     if(read(fd, &retblock->root, sizeof(uint64_t)) == -1){
     return;
     }
-    if(read(fd, &retblock->fd, sizeof(char)) == -1){
-    return;
-    }
+    retblock->fd = fd;
     return retblock;
 }
-
 
 
 /* Close the filesystem pointed to by =sb.  Returns zero on success and a
  * negative number on error.  If there is an error, all resources are freed
  * and errno is set appropriately. */
 int fs_close(struct superblock *sb)
-{}
+{
+    int ret = close(sb->fd);
+    if(ret == -1){
+    free(sb);
+    }
+}
 
 
 /* Get a free block in the filesystem.  This block shall be removed from the
