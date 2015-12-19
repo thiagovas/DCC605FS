@@ -68,9 +68,9 @@ void read_freepage_list(struct superblock *sb, const char *fname)
 {
   struct freepage fp;
   int fd = open(fname, O_RDONLY, S_IREAD);
-  printf("%d\n", sb->blksz);
+  printf("%lu\n", sb->blksz);
   read(fd, &fp, sb->blksz);
-  printf("OHOHOH %d %d %d\n", fp.next, fp.count, fp.links[0]);
+  printf("OHOHOH %lu %lu %lu\n", fp.next, fp.count, fp.links[0]);
   close(fd);
 }
 
@@ -151,12 +151,12 @@ struct superblock * fs_open(const char *fname)
     struct superblock* retblock;
     fd = open(fname, O_RDWR, S_IWRITE | S_IREAD);
     if(read(fd, &retblock->magic, sizeof(uint64_t)) == -1){
-    return;
-    }
-    else{
-        if(retblock->magic != 0xdcc605f5){
         errno = EBADF;
-        }
+        return NULL;
+    }
+    else if(retblock->magic != 0xdcc605f5){
+        errno=EBADF;
+        return NULL;
     }
     if(read(fd, &retblock->blks, sizeof(uint64_t)) == -1){
     return;
