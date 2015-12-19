@@ -1,5 +1,5 @@
 CC=gcc
-NUM_TESTS=1
+NUM_TESTS=1 2
 
 
 build: fs tests
@@ -17,3 +17,4 @@ fs:
 clean:
 	rm -f main
 	rm -f *.o
+	$(foreach var,$(NUM_TESTS),rm -f test$(var);)

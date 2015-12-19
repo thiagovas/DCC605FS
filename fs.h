@@ -116,7 +116,7 @@ int fs_write_file(struct superblock *sb, const char *fname, char *buf,
 
 ssize_t fs_read_file(struct superblock *sb, const char *fname, char *buf,
                      size_t bufsz);
-
+void read_freepage_list(struct superblock *sb, const char *fname);
 int fs_unlink(struct superblock *sb, const char *fname);
 
 int fs_mkdir(struct superblock *sb, const char *dname);
