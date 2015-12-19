@@ -8,12 +8,6 @@
 
 /************************ BEGIN - NOT LISTED ************************/
 
-/* On each link of the head of the free pages list,
- *   there will be at most [max_nodes_per_link] nodes. */
-int max_nodes_per_link;
-
-
-
 long file_length(const char *filename)
 {
 	struct stat st;
@@ -35,44 +29,30 @@ void initfs_superblock(struct superblock *sb)
 }
 
 // Set the freepages
-void initfs_freepages(struct superblock *sb)
+void initfs_freepages(int fd, struct superblock *sb)
 {
-	/* This method initializes the free pages list */
-  /* On the second block of the filesystem, we have the head of the list */
-  /* Each link on the head points to an iNode */
-  /* Then each iNode points to others iNodes, covering then all free blocks */
-  int ret=0;
-	uint64_t i=sb->freelist;
-  struct freepage fp_list;
-  
-  max_nodes_per_link = 0;
-  
-  fp_list.count = 0;
-  
-  uint64_t a=123, b=456, c=789, d=101112;
-  ret=write(sb->fd, &a, sizeof(uint64_t));
-  ret=write(sb->fd, &b, sizeof(uint64_t));
-  ret=write(sb->fd, &c, sizeof(uint64_t));
-  ret=write(sb->fd, &d, sizeof(uint64_t));
+	int ret=0;
+	uint64_t i=sb->freelist, j=sb->root+1;
+	for(;i < sb->root; i++)
+	{
+		if(i==sb->root-1)
+			ret=write(fd, (void*)0, sizeof(uint64_t));
+		else
+			ret=write(fd, (void*)(i+1), sizeof(uint64_t));
+		
+		
+		ret=write(fd, (void*)(sb->root-1), sizeof(uint64_t));
+		for(;j < sb->blks; j++)
+			ret=write(fd, (void*)j, sizeof(uint64_t));
+	}
 }
 
-/* Set the root directory */
-void initfs_inode(struct superblock *sb)
+// Set the root directory
+void initfs_inode(int fd, struct superblock *sb)
 {
 	
 }
 
-
-/* This method reads the free pages list from the file */
-void read_freepage_list(struct superblock *sb, const char *fname)
-{
-  struct freepage fp;
-  int fd = open(fname, O_RDONLY, S_IREAD);
-  printf("%d\n", sb->blksz);
-  read(fd, &fp, sb->blksz);
-  printf("OHOHOH %d %d %d\n", fp.next, fp.count, fp.links[0]);
-  close(fd);
-}
 
 /************************ END - NOT LISTED ************************/
 
@@ -113,6 +93,7 @@ struct superblock * fs_format(const char *fname, uint64_t blocksize)
 	
 	// Number of blocks needed to keep the freepages structs.
 	int freelistsz = (blocksize - 2*sizeof(uint64_t)) / blks;
+
 	int fd = open(fname, O_WRONLY, S_IWRITE | S_IREAD);
 	
 	
@@ -122,7 +103,7 @@ struct superblock * fs_format(const char *fname, uint64_t blocksize)
 	neue->blksz = blocksize;
 	neue->freeblks = blks;
 	neue->freelist = 1;
-	neue->root = 2;
+	neue->root = freelistsz+1;
 	neue->fd = fd;
 	
 	if(fd==-1)
@@ -132,10 +113,10 @@ struct superblock * fs_format(const char *fname, uint64_t blocksize)
 	}
 	
 	/* Initializing everything on [fname] */
-	/* Don't change the order of the inits - Because of the buffer */
-	initfs_superblock(neue);
-	initfs_freepages(neue);
-	//initfs_inode(fd, neue);
+	/* DON'T CHANGE THIS FUCKING ORDER - Because of the buffer */
+	initfs_superblock(fd, neue);
+	initfs_freepages(fd, neue);
+	initfs_inode(fd, neue);
 	
 	close(fd);
 	return neue;
@@ -207,7 +188,9 @@ int fs_put_block(struct superblock *sb, uint64_t block)
 
 int fs_write_file(struct superblock *sb, const char *fname, char *buf,
                   size_t cnt)
-{}
+{
+
+}
 
 
 ssize_t fs_read_file(struct superblock *sb, const char *fname, char *buf,
