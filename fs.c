@@ -199,15 +199,14 @@ struct superblock * fs_format(const char *fname, uint64_t blocksize)
  * 0xdcc605f5, then errno is set to EBADF. */
 struct superblock * fs_open(const char *fname)
 {
-    int fd;
-    fd = open(fname, O_RDWR);
+    int fd = open(fname, O_RDWR);
     if((flock(fd, LOCK_EX | LOCK_NB)) == -1) {
       errno = EBUSY;
       return NULL;
     }
     lseek(fd, 0, SEEK_SET);
-    struct superblock* retblock = (struct superblock*) malloc(sizeof(struct superblock*));
-    if(read(fd, retblock, sizeof(struct superblock*)) == -1) {
+    struct superblock* retblock = (struct superblock*) malloc(sizeof(struct superblock));
+    if(read(fd, retblock, sizeof(struct superblock)) == -1) {
         return NULL;
     }
     if(retblock->magic != 0xdcc605f5){
@@ -218,7 +217,7 @@ struct superblock * fs_open(const char *fname)
 
     uint64_t blksz = retblock->blksz;
     free(retblock);
-
+    
     retblock = (struct superblock*)malloc(blksz);
     lseek(fd, 0, SEEK_SET);
     read(fd, retblock, blksz);
@@ -240,7 +239,7 @@ int fs_close(struct superblock *sb)
     errno == EBUSY;
     return -1;
   }
-
+  
   if(sb->magic != 0xdcc605f5){
     errno = EBADF;
     return -1;
@@ -249,7 +248,7 @@ int fs_close(struct superblock *sb)
   int ret = close(sb->fd);
   free(sb);
 
-  return ret;
+  return 0;
 }
 
 
@@ -315,11 +314,10 @@ int fs_put_block(struct superblock *sb, uint64_t block)
 
     //refresh superblock values
     SB_refresh(sb);
-
     //insert block in the pile
     lseek(sb->fd, block * sb->blksz, SEEK_SET);
     write(sb->fd, pagefreed, sb->blksz);
-
+    
     free(pagefreed);
     return 0;
 }

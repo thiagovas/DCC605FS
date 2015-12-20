@@ -78,7 +78,6 @@ void test(uint64_t fsize, uint64_t blksz)
 	} else if(errno != EBUSY) {
 		printf("FAIL did not set errno EBUSY on fs reopen\n");
 	}
-
 	if(fs_close(sb)) perror("open_close");
 }
 
