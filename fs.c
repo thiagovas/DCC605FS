@@ -7,7 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <fcntl.h>
-#include "fs.h"
+#include "main.h"
 
 /************************ BEGIN - NOT LISTED ************************/
 
@@ -47,7 +47,7 @@ void initfs_freepages(struct superblock *sb)
 {
 	int ret = 0;
 	uint64_t i = sb->freelist;
-  
+
   struct freepage* fp = (struct freepage*) malloc(sizeof(struct freepage*));
   for(i=3; i < sb->blks; i++)
   {
@@ -70,14 +70,14 @@ void initfs_inode(struct superblock *sb)
   strcpy(ni->name, "/\0");
   ret = write(sb->fd, ni, sb->blksz);
   free(ni);
-  
+
   struct inode *in = (struct inode*) malloc(sb->blksz);
   /* Root - iNode */
   in->mode = IMDIR;
   in->parent = in->next = 0;
   in->meta = 1;
   ret = write(sb->fd, in, sb->blksz);
-  free(in); 
+  free(in);
 }
 /************************ END - NOT LISTED ************************/
 
@@ -100,13 +100,13 @@ void initfs_inode(struct superblock *sb)
  * =fname, then the function fails and sets errno to ENOSPC. */
 struct superblock * fs_format(const char *fname, uint64_t blocksize)
 {
-	// In case the size of the block is less than MIN_BLOCK_SIZE... 
+	// In case the size of the block is less than MIN_BLOCK_SIZE...
 	if(blocksize < MIN_BLOCK_SIZE)
 	{
 		errno = EINVAL;
 		return 0;
 	}
-  
+
 	int blks = file_length(fname)/blocksize;
 	// In case the file isn't big enough to keep MIN_BLOCK_COUNT...
 	if(blks < MIN_BLOCK_COUNT)
@@ -114,30 +114,30 @@ struct superblock * fs_format(const char *fname, uint64_t blocksize)
 		errno = ENOSPC;
 		return 0;
 	}
-	
+
 	struct superblock *neue = (struct superblock*) malloc(blocksize);
 	neue->magic = 0xdcc605f5;
 	neue->blks = blks;
 	neue->blksz = blocksize;
-  
+
   // In an empty fs, there will be just the superblock,
   // the root iNode and the head of the free pages list.
 	neue->freeblks = blks-4;
 	neue->freelist = 3;
 	neue->root = 2;
-	neue->fd = open(fname, O_WRONLY, S_IWRITE | S_IREAD);	
+	neue->fd = open(fname, O_RDWR);
 	if(neue->fd == -1)
 	{
 		// Since open already set errno, I just return NULL here.
 		return NULL;
 	}
-	
+
 	/* Initializing everything on [fname] */
   /* Don't change the order of the inits - Because of the buffer */
 	initfs_superblock(neue);
 	initfs_inode(neue);
 	initfs_freepages(neue);
-	
+
 	return neue;
 }
 
@@ -148,12 +148,12 @@ struct superblock * fs_format(const char *fname, uint64_t blocksize)
 struct superblock * fs_open(const char *fname)
 {
     int fd;
-    fd = open(fname, O_RDWR, S_IWRITE | S_IREAD);
-    if((lock = flock(fd, LOCK_NB | LOCK_EX)) == -1) {
-      close(fd); //deleta ou nao? ver mais pra frente
+    fd = open(fname, O_RDWR);
+    if((flock(fd, LOCK_EX | LOCK_NB)) == -1) {
       errno = EBUSY;
       return NULL;
     }
+    lseek(fd, 0, SEEK_SET);
     struct superblock* retblock = (struct superblock*) malloc(sizeof(struct superblock*));
     if(read(fd, retblock, sizeof(struct superblock*)) == -1) {
         return NULL;
@@ -163,7 +163,14 @@ struct superblock * fs_open(const char *fname)
         errno=EBADF;
         return NULL;
     }
-    retblock->fd = fd;
+
+    uint64_t blksz = retblock->blksz;
+    free(retblock);
+
+    retblock = (struct superblock*)malloc(blksz);
+    lseek(fd, 0, SEEK_SET);
+    read(fd, retblock, blksz);
+
     return retblock;
 }
 
@@ -174,13 +181,22 @@ struct superblock * fs_open(const char *fname)
  * and errno is set appropriately. */
 int fs_close(struct superblock *sb)
 {
-  // TODO: Check the cases where the fs_close fails.
-  lock = flock(sb->fd, LOCK_UN);
-  int ret = close(sb->fd);
-  if(ret == -1){
-    free(sb);
+  if(sb == NULL){
+    return -1;
   }
-  return ret;
+  if(flock(sb->fd, LOCK_UN | LOCK_NB) == -1){
+    errno == EBUSY;
+    return -1;
+  }
+  if(sb->magic != 0xdcc605f5){
+    errno = EBADF;
+    return -1;
+  }
+
+  int ret = close(sb->fd);
+  free(sb);
+
+  return 0;
 }
 
 
@@ -248,7 +264,6 @@ int fs_put_block(struct superblock *sb, uint64_t block)
     SB_refresh(sb);
 
     //insert block in the pile
-    //refresh superblock values
     lseek(sb->fd, block * sb->blksz, SEEK_SET);
     write(sb->fd, pagefreed, sb->blksz);
 
