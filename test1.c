@@ -69,9 +69,9 @@ void test(uint64_t fsize, uint64_t blksz)
 	sb = fs_open(fname);
 	if(!sb) perror("open");
 
-	//fs_check(sb, fsize, blksz);
-	//fs_free_check(&sb, fsize, blksz);
-	//fs_check(sb, fsize, blksz);
+	fs_check(sb, fsize, blksz);
+	fs_free_check(&sb, fsize, blksz);
+	fs_check(sb, fsize, blksz);
 
 	if(fs_open(fname)) {
 		printf("FAIL opened FS twice\n");

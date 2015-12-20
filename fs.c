@@ -87,28 +87,28 @@ void initfs_inode(struct superblock *sb)
 uint64_t find_inode(struct superblock *sb, char *fname)
 {
   uint64_t *visited = (uint64_t*) calloc(sb->blks, sizeof(uint64_t));
-  uint64_t *stack = (uint64_t*) calloc(sb->blks, sizeof(uint64_t));
-  int stack_head, stack_tail;
+  uint64_t *queue = (uint64_t*) calloc(sb->blks, sizeof(uint64_t));
+  int queue_head, queue_tail, ret;
   
-  stack_head=stack_tail=0;
+  queue_head = queue_tail = 0;
   memset(visited, 0, sb->blks);
-  memset(stack, 0, sb->blks);
-  stack[stack_tail++] = sb->root;
+  memset(queue, 0, sb->blks);
+  queue[queue_tail++] = sb->root;
   visited[sb->root] = 1;
   
   struct inode in;
   struct inode parent;
-  while(stack_head < stack_tail)
+  while(queue_head < queue_tail)
   {
-    lseek(sb->fd, stack[stack_head]*sb->blksz, SEEK_SET);
-    read(sb->fd, &in, sb->blksz);
+    lseek(sb->fd, queue[queue_head]*sb->blksz, SEEK_SET);
+    ret=read(sb->fd, &in, sb->blksz);
     if(in.mode == IMCHILD)
     {
       lseek(sb->fd, in.parent*sb->blksz, SEEK_SET);
-      read(sb->fd, &parent, sb->blksz);
+      ret=read(sb->fd, &parent, sb->blksz);
       if(parent.mode == IMREG)
       {
-        stack_head++;
+        queue_head++;
         continue;
       }
     }
@@ -116,8 +116,8 @@ uint64_t find_inode(struct superblock *sb, char *fname)
     
     struct nodeinfo ni;
     lseek(sb->fd, parent.meta*sb->blksz, SEEK_SET);
-    read(sb->fd, &ni, sb->blksz);
-    if(strcmp(ni.name, fname) == 0) return stack[stack_head];
+    ret=read(sb->fd, &ni, sb->blksz);
+    if(strcmp(ni.name, fname) == 0) return queue[queue_head];
     
     int i=0;
     if(in.mode == IMDIR)
@@ -125,7 +125,7 @@ uint64_t find_inode(struct superblock *sb, char *fname)
         if(visited[in.links[i]]==0)
         {
           visited[in.links[i]] = 1;
-          stack[stack_tail++] = in.links[i];
+          queue[queue_tail++] = in.links[i];
         }
   }
   return -1;
@@ -220,7 +220,7 @@ struct superblock * fs_open(const char *fname)
     
     retblock = (struct superblock*)malloc(blksz);
     lseek(fd, 0, SEEK_SET);
-    read(fd, retblock, blksz);
+    int ret=read(fd, retblock, blksz);
 
     return retblock;
 }
@@ -274,19 +274,19 @@ uint64_t fs_get_block(struct superblock *sb)
     perror(NULL);
     exit(EXIT_FAILURE);
   }
-
+  
   //set the read position
   lseek(sb->fd, sb->freelist * sb->blksz, SEEK_SET);
-
+  
   //get free block
-  read(sb->fd, page, sb->blksz);
+  int ret=read(sb->fd, page, sb->blksz);
   uint64_t blknumber = sb->freelist;
   sb->freelist = page->next;
   sb->freeblks--;
-
+  
   //refresh superblock values
   SB_refresh(sb);
-
+  
   free(page);
   return blknumber;
 }
@@ -316,11 +316,12 @@ int fs_put_block(struct superblock *sb, uint64_t block)
     SB_refresh(sb);
     //insert block in the pile
     lseek(sb->fd, block * sb->blksz, SEEK_SET);
-    write(sb->fd, pagefreed, sb->blksz);
+    int ret=write(sb->fd, pagefreed, sb->blksz);
     
     free(pagefreed);
     return 0;
 }
+
 
 int fs_write_file(struct superblock *sb, const char *fname, char *buf,
                   size_t cnt)
@@ -330,7 +331,12 @@ int fs_write_file(struct superblock *sb, const char *fname, char *buf,
     errno = ENAMETOOLONG;
     return -1;
   }
-  if(find_inode(sb, fname) > 0) fs_unlink(sb, fname);
+  
+  
+  uint64_t index=0;
+  if((index=find_inode(sb, fname)) > 0) fs_unlink(sb, fname);
+  
+  
 }
 
 
@@ -342,11 +348,18 @@ ssize_t fs_read_file(struct superblock *sb, const char *fname, char *buf,
     errno = ENAMETOOLONG;
     return -1;
   }
-  if(find_inode(sb, fname) < 0)
+  
+  
+  uint64_t index=0;
+  if((index=find_inode(sb, fname)) < 0)
   {
     errno = ENOENT;
     return -1;
   }
+  
+  
+  
+  
 }
 
 
@@ -357,11 +370,21 @@ int fs_unlink(struct superblock *sb, const char *fname)
     errno = ENAMETOOLONG;
     return -1;
   }
-  if(find_inode(sb, fname) < 0) 
+  
+  int ret=0;
+  uint64_t index=0;
+  if((index=find_inode(sb, fname)) < 0) 
   {
     errno = ENOENT;
     return -1;
   }
+  
+  struct inode in;
+  lseek(sb->fd, index*sb->blksz, SEEK_SET);
+  ret=read(sb->fd, &in, sb->blksz);
+  do {
+    
+  }while(in.next==0);
 }
 
 
@@ -372,11 +395,18 @@ int fs_mkdir(struct superblock *sb, const char *dname)
     errno = ENAMETOOLONG;
     return -1;
   }
-  if(find_inode(sb, dname) > 0)
+
+  uint64_t index=0;
+  if((index-find_inode(sb, dname)) > 0)
   {
     errno = EEXIST;
     return -1;
-  }
+  } 
+  
+  
+  
+  
+  
 }
 
 
@@ -387,12 +417,21 @@ int fs_rmdir(struct superblock *sb, const char *dname)
     errno = ENAMETOOLONG;
     return -1;
   }
-  if(find_inode(sb, dname) < 0) 
+
+  uint64_t index=0;
+  if((index=find_inode(sb, dname)) < 0) 
   {
     errno = ENOENT;
     return -1;
   }
+  
+  
+  
+  
+  
+    
 }
+
 
 
 char * fs_list_dir(struct superblock *sb, const char *dname)
@@ -402,11 +441,23 @@ char * fs_list_dir(struct superblock *sb, const char *dname)
     errno = ENAMETOOLONG;
     return -1;
   }
-  if(find_inode(sb, dname) < 0)
+
+  uint64_t index=0;
+  if((index=find_inode(sb, dname)) < 0)
   {
     errno = ENOENT;
     return -1;
   }
+  
+  
+  
+  
+  
+  
+  
+  
 }
+
+
 
 
