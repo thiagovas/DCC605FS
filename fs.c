@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <stdio.h>
+#include <string.h>
 #include <fcntl.h>
 #include "fs.h"
 
@@ -38,59 +39,47 @@ void SB_refresh(struct superblock *sb)
 // Set the superblock
 void initfs_superblock(struct superblock *sb)
 {
-	int ret=0, zero=0;
-	ret=write(sb->fd, &sb->magic, sizeof(uint64_t));
-	ret=write(sb->fd, &sb->blks, sizeof(uint64_t));
-	ret=write(sb->fd, &sb->blksz, sizeof(uint64_t));
-	ret=write(sb->fd, &sb->freeblks, sizeof(uint64_t));
-	ret=write(sb->fd, &sb->freelist, sizeof(uint64_t));
-	ret=write(sb->fd, &sb->root, sizeof(uint64_t));
-	ret=write(sb->fd, &sb->fd, sizeof(uint64_t));
-
-  ret=write(sb->fd, &zero, sb->blksz-8*sizeof(uint64_t)); // Empty on the rest of the block
+	int ret=write(sb->fd, sb, sizeof(sb->blksz));
 }
 
 // Set the freepages
 void initfs_freepages(struct superblock *sb)
 {
 	int ret = 0, zero=0;
-	uint64_t i = 3;
-
+	uint64_t i = sb->freelist;
+  
+  struct freepage* fp = (struct freepage*) malloc(sizeof(struct freepage*));
   for(i=3; i < sb->blks; i++)
   {
-    // Next
-    uint64_t value=i+1;
-    if(i == sb->blks-1) value = 0;
-    ret=write(sb->fd, &value, sizeof(uint64_t));
-
-
-    // Rest
-    ret=write(sb->fd, &zero, sb->blksz-sizeof(uint64_t));
+    fp->next=i+1;
+    if(i == sb->blks-1) fp->next = 0;
+    ret=write(sb->fd, fp, sizeof(sb->blksz));
   }
+  free(fp);
 }
 
 
 // Set the root directory
 void initfs_inode(struct superblock *sb)
 {
-  int ret=0, zero=0, mode=IMDIR;
-  char slash = '/';
-  int meta=2;
+  int ret=0;
 
+  struct nodeinfo *ni = (struct nodeinfo*) malloc(sizeof(struct nodeinfo*));
   /* Root - NodeInfo */
-  ret = write(sb->fd, &zero, sizeof(uint64_t)); //size
-  ret = write(sb->fd, &zero, 7*sizeof(uint64_t)); // reserved
-  ret = write(sb->fd, &slash, sizeof(char)); // name
-  ret = write(sb->fd, &zero, sb->blksz-8*sizeof(uint64_t)-sizeof(char));
-
-
+  ni->size = 0;
+  strcpy(ni->name, "/\0");
+  ret = write(sb->fd, ni, sb->blksz);
+  free(ni);
+  
+  struct inode *in = (struct inode*) malloc(sizeof(struct inode*));
   /* Root - iNode */
-  ret = write(sb->fd, &mode, sizeof(uint64_t)); // mode
-  ret = write(sb->fd, &zero, sizeof(uint64_t)); // parent
-  ret = write(sb->fd, &meta, sizeof(uint64_t)); // meta
-  ret = write(sb->fd, &zero, sizeof(uint64_t)); // next
-  ret = write(sb->fd, &zero, sb->blksz-4*sizeof(uint64_t)); // Rest - Links - Everything Empty
-
+  in->mode = IMDIR;
+  in->parent = 0;
+  in->meta = 2;
+  in->next = 0;
+  ret = write(sb->fd, in, sb->blksz); // next
+  free(in);
+    
 }
 /************************ END - NOT LISTED ************************/
 
