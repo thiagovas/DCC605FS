@@ -13,7 +13,7 @@
 
 #define MIN(a,b) ((a)>(b)?(b):(a))
 #define MAX(a,b) ((a)>(b)?(a):(b))
-
+#define MAX_FNAME(_blksz) (_blksz - 8*sizeof(uint64_t))
 
 
 /* On each link of the head of the free pages list,
@@ -79,6 +79,26 @@ void initfs_inode(struct superblock *sb)
   ret = write(sb->fd, in, sb->blksz);
   free(in); 
 }
+
+
+/* This function returns the block index if there is an inode that is named [fname]
+ *  it returns -1 otehrwise.
+ */
+uint64_t find_inode(struct superblock *sb, char *fname)
+{
+  uint64_t *visited = (uint64_t*) calloc(sb->blks, sizeof(uint64_t));
+  uint64_t *stack = (uint64_t*) calloc(sb->blks, sizeof(uint64_t));
+  int stack_head, stack_tail;
+  
+  stack_head=stack_tail=0;
+  memset(visited, 0, sb->blks);
+  memset(stack, 0, sb->blks);
+  stack[stack_tail++] = sb->root;
+  visited[sb->root] = 1;
+  
+  //TODO: Finish implementing this method
+}
+
 /************************ END - NOT LISTED ************************/
 
 
@@ -125,7 +145,7 @@ struct superblock * fs_format(const char *fname, uint64_t blocksize)
 	neue->freeblks = blks-4;
 	neue->freelist = 3;
 	neue->root = 2;
-	neue->fd = open(fname, O_WRONLY, S_IWRITE | S_IREAD);	
+	neue->fd = open(fname, O_RDWR, S_IWRITE | S_IREAD);	
 	if(neue->fd == -1)
 	{
 		// Since open already set errno, I just return NULL here.
@@ -260,28 +280,38 @@ int fs_put_block(struct superblock *sb, uint64_t block)
 int fs_write_file(struct superblock *sb, const char *fname, char *buf,
                   size_t cnt)
 {
-    
+  if(find_inode(sb, fname) > 0) fs_unlink(sb, fname);
 }
 
 
 ssize_t fs_read_file(struct superblock *sb, const char *fname, char *buf,
                      size_t bufsz)
-{}
+{
+  //if(find_inode(sb, fname) < 0) 
+}
 
 
 int fs_unlink(struct superblock *sb, const char *fname)
-{}
+{
+  //if(find_inode(sb, fname) < 0) 
+}
 
 
 int fs_mkdir(struct superblock *sb, const char *dname)
-{}
+{
+  //if(find_inode(sb, dname) > 0)
+}
 
 
 int fs_rmdir(struct superblock *sb, const char *dname)
-{}
+{
+  //if(find_inode(sb, dname) < 0) 
+}
 
 
 char * fs_list_dir(struct superblock *sb, const char *dname)
-{}
+{
+  //if(find_inode(sb, dname) < 0)
+}
 
 
