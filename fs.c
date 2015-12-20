@@ -28,6 +28,12 @@ long file_length(const char *filename)
 	return st.st_size;
 }
 
+void SB_refresh(struct superblock *sb)
+{
+    lseek(sb->fd, 0, SEEK_SET);
+    write(sb->fd, sb, sb->blksz);
+}
+
 // Set the superblock
 void initfs_superblock(struct superblock *sb)
 {
@@ -149,9 +155,9 @@ struct superblock * fs_open(const char *fname)
     int fd;
     fd = open(fname, O_RDWR, S_IWRITE | S_IREAD);
     if((lock = flock(fd, LOCK_NB | LOCK_EX)) == -1) {
-    close(fd); //deleta ou nao? ver mais pra frente
-    errno = EBUSY;
-    return 0;
+    	close(fd); //deleta ou nao? ver mais pra frente
+    	errno = EBUSY;
+    	return 0;
     }
     struct superblock* retblock = (struct superblock*) malloc(sizeof(struct superblock*));
     if(read(fd, &retblock->magic, sizeof(uint64_t)) == -1){
@@ -203,22 +209,21 @@ int fs_close(struct superblock *sb)
 uint64_t fs_get_block(struct superblock *sb)
 {
     //free blocks check
-    if(sb->freelist == 0){
-    errno = ENOSPC;
-    return 0;
+    if(sb->freeblks == 0){
+        errno = ENOSPC;
+        return 0;
     }
-
     //file descriptor check
     if(sb->magic != 0xdcc605f5){
-    errno = EBADF;
-    return -1;
+        errno = EBADF;
+        return -1;
     }
 
     struct freepage *page = (struct freepage*)malloc(sb->blksz);
-    if(!freelist) {
-    	perror(NULL);
+	if(!page) {
+        perror(NULL);
         exit(EXIT_FAILURE);
-    }
+	}
 
     //set the read position
     lseek(sb->fd, sb->freelist * sb->blksz, SEEK_SET);
@@ -230,19 +235,42 @@ uint64_t fs_get_block(struct superblock *sb)
     sb->freeblks--;
 
     //refresh superblock values
-    lseek(sb->fd, 0, SEEK_SET);
-    write(sb->fd, sb, sb->blksz);
+    SB_refresh(sb);
 
     free(page);
     return blknumber;
-}
 
+}
 
 /* Put =block back into the filesystem as a free block.  Returns zero on
  * success or a negative value on error.  If there is an error, errno is set
  * accordingly. */
 int fs_put_block(struct superblock *sb, uint64_t block)
-{}
+{
+    if(sb->magic != 0xdcc605f5){
+        errno = EBADF;
+        return -1;
+    }
+
+    struct freepage *pagefreed = (struct freepage*)malloc(sb->blksz);
+    if(!pagefreed) {
+        perror(NULL);
+        exit(EXIT_FAILURE);
+	}
+
+    //set list pointers
+    pagefreed->next = sb->freelist;
+    sb->freelist = block;
+    sb->freeblks++;
+
+    //refresh superblock values
+    SB_refresh(sb);
+
+    //insert block in the pile
+    //refresh superblock values
+    lseek(sb->fd, block * sb->blksz, SEEK_SET);
+    write(sb->fd, pagefreed, sb->blksz);
+}
 
 
 int fs_write_file(struct superblock *sb, const char *fname, char *buf,
