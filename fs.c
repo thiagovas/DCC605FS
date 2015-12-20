@@ -13,7 +13,7 @@
 
 #define MIN(a,b) ((a)>(b)?(b):(a))
 #define MAX(a,b) ((a)>(b)?(a):(b))
-#define MAX_FNAME(_blksz) (_blksz - 8*sizeof(uint64_t))
+#define MAX_FNAME(_blksz) ((_blksz) - 8*sizeof(uint64_t))
 
 
 /* On each link of the head of the free pages list,
@@ -96,7 +96,39 @@ uint64_t find_inode(struct superblock *sb, char *fname)
   stack[stack_tail++] = sb->root;
   visited[sb->root] = 1;
   
-  //TODO: Finish implementing this method
+  struct inode in;
+  struct inode parent;
+  while(stack_head < stack_tail)
+  {
+    lseek(sb->fd, stack[stack_head]*sb->blksz, SEEK_SET);
+    read(sb->fd, &in, sb->blksz);
+    if(in.mode == IMCHILD)
+    {
+      lseek(sb->fd, in.parent*sb->blksz, SEEK_SET);
+      read(sb->fd, &parent, sb->blksz);
+      if(parent.mode == IMREG)
+      {
+        stack_head++;
+        continue;
+      }
+    }
+    else parent = in;
+    
+    struct nodeinfo ni;
+    lseek(sb->fd, parent.meta*sb->blksz, SEEK_SET);
+    read(sb->fd, &ni, sb->blksz);
+    if(strcmp(ni.name, fname) == 0) return stack[stack_head];
+    
+    int i=0;
+    if(in.mode == IMDIR)
+      for(; i < ni.size; i++)
+        if(visited[in.links[i]]==0)
+        {
+          visited[in.links[i]] = 1;
+          stack[stack_tail++] = in.links[i];
+        }
+  }
+  return -1;
 }
 
 /************************ END - NOT LISTED ************************/
@@ -295,6 +327,11 @@ int fs_put_block(struct superblock *sb, uint64_t block)
 int fs_write_file(struct superblock *sb, const char *fname, char *buf,
                   size_t cnt)
 {
+  if(strlen(fname) > MAX_FNAME(sb->blksz))
+  {
+    errno = ENAMETOOLONG;
+    return -1;
+  }
   if(find_inode(sb, fname) > 0) fs_unlink(sb, fname);
 }
 
@@ -302,31 +339,76 @@ int fs_write_file(struct superblock *sb, const char *fname, char *buf,
 ssize_t fs_read_file(struct superblock *sb, const char *fname, char *buf,
                      size_t bufsz)
 {
-  //if(find_inode(sb, fname) < 0) 
+  if(strlen(fname) > MAX_FNAME(sb->blksz))
+  {
+    errno = ENAMETOOLONG;
+    return -1;
+  }
+  if(find_inode(sb, fname) < 0)
+  {
+    errno = ENOENT;
+    return -1;
+  }
 }
 
 
 int fs_unlink(struct superblock *sb, const char *fname)
 {
-  //if(find_inode(sb, fname) < 0) 
+  if(strlen(fname) > MAX_FNAME(sb->blksz))
+  {
+    errno = ENAMETOOLONG;
+    return -1;
+  }
+  if(find_inode(sb, fname) < 0) 
+  {
+    errno = ENOENT;
+    return -1;
+  }
 }
 
 
 int fs_mkdir(struct superblock *sb, const char *dname)
 {
-  //if(find_inode(sb, dname) > 0)
+  if(strlen(dname) > MAX_FNAME(sb->blksz))
+  {
+    errno = ENAMETOOLONG;
+    return -1;
+  }
+  if(find_inode(sb, dname) > 0)
+  {
+    errno = EEXIST;
+    return -1;
+  }
 }
 
 
 int fs_rmdir(struct superblock *sb, const char *dname)
 {
-  //if(find_inode(sb, dname) < 0) 
+  if(strlen(dname) > MAX_FNAME(sb->blksz))
+  {
+    errno = ENAMETOOLONG;
+    return -1;
+  }
+  if(find_inode(sb, dname) < 0) 
+  {
+    errno = ENOENT;
+    return -1;
+  }
 }
 
 
 char * fs_list_dir(struct superblock *sb, const char *dname)
 {
-  //if(find_inode(sb, dname) < 0)
+  if(strlen(dname) > MAX_FNAME(sb->blksz))
+  {
+    errno = ENAMETOOLONG;
+    return -1;
+  }
+  if(find_inode(sb, dname) < 0)
+  {
+    errno = ENOENT;
+    return -1;
+  }
 }
 
 
