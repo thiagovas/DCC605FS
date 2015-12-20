@@ -68,8 +68,6 @@ void initfs_inode(struct superblock *sb)
   /* Root - NodeInfo */
   ni->size = 0;
   strcpy(ni->name, "/\0");
-  //ni->name[0] = '/';
-  //ni->name[1] = '\0';
   ret = write(sb->fd, ni, sb->blksz);
   free(ni);
   
@@ -77,7 +75,7 @@ void initfs_inode(struct superblock *sb)
   /* Root - iNode */
   in->mode = IMDIR;
   in->parent = in->next = 0;
-  in->meta = 2;
+  in->meta = 1;
   ret = write(sb->fd, in, sb->blksz);
   free(in); 
 }
@@ -262,7 +260,7 @@ int fs_put_block(struct superblock *sb, uint64_t block)
 int fs_write_file(struct superblock *sb, const char *fname, char *buf,
                   size_t cnt)
 {
-  
+    
 }
 
 
