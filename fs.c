@@ -117,7 +117,7 @@ struct superblock * fs_format(const char *fname, uint64_t blocksize)
 		return 0;
 	}
 	
-	struct superblock *neue = (struct superblock*) malloc(sizeof(struct superblock*));
+	struct superblock *neue = (struct superblock*) malloc(blocksize);
 	neue->magic = 0xdcc605f5;
 	neue->blks = blks;
 	neue->blksz = blocksize;
@@ -157,28 +157,13 @@ struct superblock * fs_open(const char *fname)
       return NULL;
     }
     struct superblock* retblock = (struct superblock*) malloc(sizeof(struct superblock*));
-    if(read(fd, &retblock->magic, sizeof(uint64_t)) == -1){
+    if(read(fd, retblock, sizeof(struct superblock*)) == -1) {
         return NULL;
     }
-    else if(retblock->magic != 0xdcc605f5){
+    if(retblock->magic != 0xdcc605f5){
         close(fd);
         errno=EBADF;
         return NULL;
-    }
-    if(read(fd, &retblock->blks, sizeof(uint64_t)) == -1){
-    	return;
-    }
-    if(read(fd, &retblock->blksz, sizeof(uint64_t)) == -1){
-    	return;
-    }
-    if(read(fd, &retblock->freeblks, sizeof(uint64_t)) == -1){
-    	return;
-    }
-    if(read(fd, &retblock->freelist, sizeof(uint64_t)) == -1){
-    	return;
-    }
-    if(read(fd, &retblock->root, sizeof(uint64_t)) == -1){
-    	return;
     }
     retblock->fd = fd;
     return retblock;
