@@ -1,5 +1,5 @@
 CC=gcc
-NUM_TESTS=1 2
+NUM_TESTS=1
 
 
 build: fs tests

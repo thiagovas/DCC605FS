@@ -9,6 +9,11 @@
 
 /************************ BEGIN - NOT LISTED ************************/
 
+#define MIN(a,b) ((a)>(b)?(b):(a))
+#define MAX(a,b) ((a)>(b)?(a):(b))
+
+
+
 /* On each link of the head of the free pages list,
  *   there will be at most [max_nodes_per_link] nodes. */
 int max_nodes_per_link;
@@ -26,7 +31,7 @@ long file_length(const char *filename)
 // Set the superblock
 void initfs_superblock(struct superblock *sb)
 {
-	int ret;
+	int ret=0;
 	ret=write(sb->fd, &sb->magic, sizeof(uint64_t));
 	ret=write(sb->fd, &sb->blks, sizeof(uint64_t));
 	ret=write(sb->fd, &sb->blksz, sizeof(uint64_t));
@@ -39,20 +44,30 @@ void initfs_superblock(struct superblock *sb)
 // Set the freepages
 void initfs_freepages(struct superblock *sb)
 {
-	int ret=0;
-	uint64_t i=sb->freelist, j=sb->root+1;
-	for(;i < sb->root; i++)
-	{
-		if(i==sb->root-1)
-			ret=write(sb->fd, (void*)0, sizeof(uint64_t));
-		else
-			ret=write(sb->fd, (void*)(i+1), sizeof(uint64_t));
-		
-		
-		ret=write(sb->fd, (void*)(sb->root-1), sizeof(uint64_t));
-		for(;j < sb->blks; j++)
-			ret=write(sb->fd, (void*)j, sizeof(uint64_t));
-	}
+	int ret = 0, value=0;
+	uint64_t i = 4;
+  
+  /* This variable keeps the maximum number of blocks the list of links can keep. */
+  uint64_t freepage_max_count = (sb->blksz-2*sizeof(uint64_t))/sizeof(uint64_t);
+  
+  while(i < sb->blks)
+  {
+    uint64_t to_be_written = MIN(freepage_max_count, sb->blks);
+    
+    // Next
+    if(to_be_written <= freepage_max_count) value = i+to_be_written;
+    else value=0;
+    
+    ret=write(sb->fd, &value, sizeof(uint64_t));
+    
+    // Count
+    ret = write(sb->fd, &to_be_written, sizeof(uint64_t));
+    
+    
+    // Links
+    for(; to_be_written > 0; i++, to_be_written--)
+      ret = write(sb->fd, &i, sizeof(uint64_t));
+  }
 }
 
 // Set the root directory
@@ -60,20 +75,6 @@ void initfs_inode(struct superblock *sb)
 {
 	
 }
-
-
-
-/* This method reads the free pages list from the file */
-void read_freepage_list(struct superblock *sb, const char *fname)
-{
-  struct freepage fp;
-  int fd = open(fname, O_RDONLY, S_IREAD);
-  printf("%lu\n", sb->blksz);
-  read(fd, &fp, sb->blksz);
-  printf("OHOHOH %lu %lu %lu\n", fp.next, fp.count, fp.links[0]);
-  close(fd);
-}
-
 /************************ END - NOT LISTED ************************/
 
 
@@ -145,10 +146,9 @@ struct superblock * fs_format(const char *fname, uint64_t blocksize)
  * 0xdcc605f5, then errno is set to EBADF. */
 struct superblock * fs_open(const char *fname)
 {
-
     int fd;
     fd = open(fname, O_RDWR, S_IWRITE | S_IREAD);
-    if(lock = flock(fd, LOCK_NB | LOCK_EX)==-1){
+    if((lock = flock(fd, LOCK_NB | LOCK_EX)) == -1) {
     close(fd);
     errno = EBUSY;
     return 0;
