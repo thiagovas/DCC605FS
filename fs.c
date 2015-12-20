@@ -7,7 +7,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <fcntl.h>
-#include "main.h"
+#include "fs.h"
 
 /************************ BEGIN - NOT LISTED ************************/
 
@@ -52,7 +52,7 @@ void initfs_freepages(struct superblock *sb)
   for(i=3; i < sb->blks; i++)
   {
     fp->next=i+1;
-    if(i == sb->blks-1) fp->next = 0;
+    if(i == sb->blks-1) fp->next = -1;
     ret=write(sb->fd, fp, sb->blksz);
   }
   free(fp);
@@ -122,7 +122,7 @@ struct superblock * fs_format(const char *fname, uint64_t blocksize)
 
   // In an empty fs, there will be just the superblock,
   // the root iNode and the head of the free pages list.
-	neue->freeblks = blks-4;
+	neue->freeblks = blks-3;
 	neue->freelist = 3;
 	neue->root = 2;
 	neue->fd = open(fname, O_RDWR);
@@ -188,6 +188,7 @@ int fs_close(struct superblock *sb)
     errno == EBUSY;
     return -1;
   }
+
   if(sb->magic != 0xdcc605f5){
     errno = EBADF;
     return -1;
@@ -196,7 +197,7 @@ int fs_close(struct superblock *sb)
   int ret = close(sb->fd);
   free(sb);
 
-  return 0;
+  return ret;
 }
 
 
@@ -207,7 +208,7 @@ int fs_close(struct superblock *sb)
 uint64_t fs_get_block(struct superblock *sb)
 {
   //free blocks check
-  if(sb->freeblks == 0){
+  if(sb->freelist == -1){
     errno = ENOSPC;
     return 0;
   }
@@ -270,7 +271,6 @@ int fs_put_block(struct superblock *sb, uint64_t block)
     free(pagefreed);
     return 0;
 }
-
 
 int fs_write_file(struct superblock *sb, const char *fname, char *buf,
                   size_t cnt)
