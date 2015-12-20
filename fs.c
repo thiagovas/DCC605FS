@@ -39,7 +39,7 @@ void SB_refresh(struct superblock *sb)
 // Set the superblock
 void initfs_superblock(struct superblock *sb)
 {
-	int ret=write(sb->fd, sb, sizeof(sb->blksz));
+	int ret=write(sb->fd, sb, sb->blksz);
 }
 
 // Set the freepages
@@ -53,7 +53,7 @@ void initfs_freepages(struct superblock *sb)
   {
     fp->next=i+1;
     if(i == sb->blks-1) fp->next = 0;
-    ret=write(sb->fd, fp, sizeof(sb->blksz));
+    ret=write(sb->fd, fp, sb->blksz);
   }
   free(fp);
 }
