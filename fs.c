@@ -11,6 +11,8 @@
 
 /************************ BEGIN - NOT LISTED ************************/
 
+#define true 1
+#define false 0
 #define MIN(a,b) ((a)>(b)?(b):(a))
 #define MAX(a,b) ((a)>(b)?(a):(b))
 #define MAX_FNAME(_blksz) ((_blksz) - 8*sizeof(uint64_t))
@@ -19,8 +21,6 @@
 /* On each link of the head of the free pages list,
  *   there will be at most [max_nodes_per_link] nodes. */
 int max_nodes_per_link;
-
-static int lock;
 
 
 long file_length(const char *filename)
@@ -173,7 +173,10 @@ void remove_links(struct superblock *sb, int index)
         {
           int j=i+1;
           while(j < ni.size)
-            in.links[j-1]=in.links[j++];
+          {
+            in.links[j-1] = in.links[j];
+            j++;
+          }
           ni.size-=1;
           i--;
           lseek(sb->fd, parent.meta*sb->blksz, SEEK_SET);
@@ -196,9 +199,9 @@ struct nodeinfo * get_node_info(struct superblock *sb, uint64_t index)
   struct nodeinfo* info = (struct nodeinfo*)malloc(sb->blksz);
 
   lseek(sb->fd, (index * sb->blksz), SEEK_SET);
-  read(sb->fd, node, sb->blksz);
+  int ret=read(sb->fd, node, sb->blksz);
   lseek(sb->fd, (node->meta * sb->blksz), SEEK_SET);
-  read(sb->fd, info, sb->blksz);
+  ret=read(sb->fd, info, sb->blksz);
   free(node);
 
   return info;
@@ -453,6 +456,21 @@ int fs_unlink(struct superblock *sb, const char *fname)
   }
   
   remove_links(sb, index);
+  struct inode in;
+  lseek(sb->fd, index*sb->blksz, SEEK_SET);
+  ret=read(sb->fd, &in, sb->blksz);
+  fs_put_block(sb, in.meta);
+  while(true)
+  {
+    int next = in.next;
+    fs_put_block(sb, index);
+    if(next==0) break;
+    index=next;
+    lseek(sb->fd, index*sb->blksz, SEEK_SET);
+    ret=read(sb->fd, &in, sb->blksz);
+  }
+
+  return 0;
 }
 
 
