@@ -1,5 +1,6 @@
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/file.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <errno.h>
@@ -29,33 +30,35 @@ void initfs_superblock(struct superblock *sb)
 }
 
 // Set the freepages
-void initfs_freepages(int fd, struct superblock *sb)
+void initfs_freepages(struct superblock *sb)
 {
 	int ret=0;
 	uint64_t i=sb->freelist, j=sb->root+1;
 	for(;i < sb->root; i++)
 	{
 		if(i==sb->root-1)
-			ret=write(fd, (void*)0, sizeof(uint64_t));
+			ret=write(sb->fd, (void*)0, sizeof(uint64_t));
 		else
-			ret=write(fd, (void*)(i+1), sizeof(uint64_t));
+			ret=write(sb->fd, (void*)(i+1), sizeof(uint64_t));
 		
 		
-		ret=write(fd, (void*)(sb->root-1), sizeof(uint64_t));
+		ret=write(sb->fd, (void*)(sb->root-1), sizeof(uint64_t));
 		for(;j < sb->blks; j++)
-			ret=write(fd, (void*)j, sizeof(uint64_t));
+			ret=write(sb->fd, (void*)j, sizeof(uint64_t));
 	}
 }
 
 // Set the root directory
-void initfs_inode(int fd, struct superblock *sb)
+void initfs_inode(struct superblock *sb)
 {
 	
 }
 
+static int lock;
 
-<<<<<<< HEAD
-=======
+
+//<<<<<<< HEAD comentei tudo para ser compilavel, o make nao rodava sem esse head e esse numero estranho estarem comentados
+//=======
 /* This method reads the free pages list from the file */
 void read_freepage_list(struct superblock *sb, const char *fname)
 {
@@ -67,7 +70,7 @@ void read_freepage_list(struct superblock *sb, const char *fname)
   close(fd);
 }
 
->>>>>>> 68cd9df18bbdedf134cfe58bf97483993f28737e
+//>>>>>>> 68cd9df18bbdedf134cfe58bf97483993f28737e
 /************************ END - NOT LISTED ************************/
 
 
@@ -94,21 +97,19 @@ struct superblock * fs_format(const char *fname, uint64_t blocksize)
 	if(blocksize < MIN_BLOCK_SIZE)
 	{
 		errno = EINVAL;
-		return NULL;
+		return 0;
 	}
-	
+
 	int blks = file_length(fname)/blocksize;
 	// In case the file isn't big enough to keep MIN_BLOCK_COUNT...
 	if(blks < MIN_BLOCK_COUNT)
 	{
 		errno = ENOSPC;
-		return NULL;
+		return 0;
 	}
 	
 	// Number of blocks needed to keep the freepages structs.
 	int freelistsz = (blocksize - 2*sizeof(uint64_t)) / blks;
-
-	int fd = open(fname, O_WRONLY, S_IWRITE | S_IREAD);
 	
 	
 	struct superblock *neue = (struct superblock*) malloc(sizeof(struct superblock*));
@@ -118,9 +119,11 @@ struct superblock * fs_format(const char *fname, uint64_t blocksize)
 	neue->freeblks = blks;
 	neue->freelist = 1;
 	neue->root = freelistsz+1;
-	neue->fd = fd;
+	neue->fd = 0;
+
+	neue->fd = open(fname, O_WRONLY, S_IWRITE | S_IREAD);
 	
-	if(fd==-1)
+	if(neue->fd==-1)
 	{
 		// Since open already set errno, I just return here.
 		return;
@@ -128,11 +131,10 @@ struct superblock * fs_format(const char *fname, uint64_t blocksize)
 	
 	/* Initializing everything on [fname] */
 	/* DON'T CHANGE THIS FUCKING ORDER - Because of the buffer */
-	initfs_superblock(fd, neue);
-	initfs_freepages(fd, neue);
-	initfs_inode(fd, neue);
+	initfs_superblock(neue);
+	initfs_freepages(neue);
+	initfs_inode(neue);
 	
-	close(fd);
 	return neue;
 }
 
@@ -142,16 +144,24 @@ struct superblock * fs_format(const char *fname, uint64_t blocksize)
  * 0xdcc605f5, then errno is set to EBADF. */
 struct superblock * fs_open(const char *fname)
 {
+
     int fd;
-    struct superblock* retblock;
     fd = open(fname, O_RDWR, S_IWRITE | S_IREAD);
+    if(lock = flock(fd, LOCK_NB | LOCK_EX)==-1){
+    close(fd);
+    errno = EBUSY;
+    return 0;
+    }
+    struct superblock* retblock = (struct superblock*) malloc(sizeof(struct superblock*));
     if(read(fd, &retblock->magic, sizeof(uint64_t)) == -1){
         errno = EBADF;
-        return NULL;
+        close(fd);
+        return 0;
     }
     else if(retblock->magic != 0xdcc605f5){
         errno=EBADF;
-        return NULL;
+        close(fd);
+        return 0;
     }
     if(read(fd, &retblock->blks, sizeof(uint64_t)) == -1){
     return;
@@ -173,11 +183,13 @@ struct superblock * fs_open(const char *fname)
 }
 
 
+
 /* Close the filesystem pointed to by =sb.  Returns zero on success and a
  * negative number on error.  If there is an error, all resources are freed
  * and errno is set appropriately. */
 int fs_close(struct superblock *sb)
 {
+    lock = flock(sb->fd, LOCK_UN);
     int ret = close(sb->fd);
     if(ret == -1){
     free(sb);
