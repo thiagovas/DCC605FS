@@ -32,7 +32,7 @@ long file_length(const char *filename)
 void SB_refresh(struct superblock *sb)
 {
     lseek(sb->fd, 0, SEEK_SET);
-    write(sb->fd, sb, sb->blksz);
+    int ret=write(sb->fd, sb, sb->blksz);
 }
 
 // Set the superblock
@@ -56,7 +56,7 @@ void initfs_freepages(struct superblock *sb)
 	int ret = 0, zero=0;
 	uint64_t i = 3;
   
-  for(i=3; i < sb->blks. i++)
+  for(i=3; i < sb->blks; i++)
   {
     // Next
     uint64_t value=i+1;
@@ -73,21 +73,22 @@ void initfs_freepages(struct superblock *sb)
 // Set the root directory
 void initfs_inode(struct superblock *sb)
 {
-  int ret=0;
+  int ret=0, zero=0;
+  char slash = '/';
   
   /* Root - NodeInfo */
-  ret = write(sb->fd, 0, sizeof(uint64_t)); //size
-  ret = write(sb->fd, 0, 7*sizeof(uint64_t)); // reserved
-  ret = write(sb->fd, '/', sizeof(char)); // name
-  ret = write(sb->fd, 0, sb->blksz-8*sizeof(uint64_t)-sizeof(char));
+  ret = write(sb->fd, &zero, sizeof(uint64_t)); //size
+  ret = write(sb->fd, &zero, 7*sizeof(uint64_t)); // reserved
+  ret = write(sb->fd, &slash, sizeof(char)); // name
+  ret = write(sb->fd, &zero, sb->blksz-8*sizeof(uint64_t)-sizeof(char));
   
   
   /* Root - iNode */
   ret = write(sb->fd, IMDIR, sizeof(uint64_t)); // mode
-  ret = write(sb->fd, 0, sizeof(uint64_t)); // parent
+  ret = write(sb->fd, &zero, sizeof(uint64_t)); // parent
   ret = write(sb->fd, 2, sizeof(uint64_t)); // meta
-  ret = write(sb->fd, 0, sizeof(uint64_t)); // next
-  ret = write(sb->fd, 0, sb->blksz-4*sizeof(uint64_t)); // Rest - Links - Everything Empty
+  ret = write(sb->fd, &zero, sizeof(uint64_t)); // next
+  ret = write(sb->fd, &zero, sb->blksz-4*sizeof(uint64_t)); // Rest - Links - Everything Empty
 
 }
 /************************ END - NOT LISTED ************************/
@@ -200,11 +201,13 @@ struct superblock * fs_open(const char *fname)
  * and errno is set appropriately. */
 int fs_close(struct superblock *sb)
 {
-    lock = flock(sb->fd, LOCK_UN);
-    int ret = close(sb->fd);
-    if(ret == -1){
-      free(sb);
-    }
+  // TODO: Check the cases where the fs_close fails.
+  lock = flock(sb->fd, LOCK_UN);
+  int ret = close(sb->fd);
+  if(ret == -1){
+    free(sb);
+  }
+  return ret;
 }
 
 
@@ -217,7 +220,7 @@ uint64_t fs_get_block(struct superblock *sb)
   //free blocks check
   if(sb->freeblks == 0){
     errno = ENOSPC;
-    return NULL;
+    return 0;
   }
   //file descriptor check
   if(sb->magic != 0xdcc605f5){
