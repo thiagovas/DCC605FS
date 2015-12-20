@@ -6,13 +6,10 @@ build: fs tests
 
 
 tests:
-	$(foreach var,$(NUM_TESTS),$(CC) test$(var).c fs.o -o test$(var) -O;)
-
+	$(foreach var,$(NUM_TESTS),$(CC) test$(var).c fs.o -o test$(var) -O -Wall;)
 
 fs:
-	$(CC) -c fs.c -o fs.o -O2
-
-
+	$(CC) -c fs.c -o fs.o -O2 -Wall
 
 clean:
 	rm -f main

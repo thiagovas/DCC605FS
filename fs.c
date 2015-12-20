@@ -101,7 +101,7 @@ struct superblock * fs_format(const char *fname, uint64_t blocksize)
 		errno = EINVAL;
 		return 0;
 	}
-
+  
 	int blks = file_length(fname)/blocksize;
 	// In case the file isn't big enough to keep MIN_BLOCK_COUNT...
 	if(blks < MIN_BLOCK_COUNT)
@@ -110,15 +110,11 @@ struct superblock * fs_format(const char *fname, uint64_t blocksize)
 		return 0;
 	}
 	
-	// Number of blocks needed to keep the freepages structs.
-	int freelistsz = (blocksize - 2*sizeof(uint64_t)) / blks;
-	
-	
 	struct superblock *neue = (struct superblock*) malloc(sizeof(struct superblock*));
 	neue->magic = 0xdcc605f5;
 	neue->blks = blks;
 	neue->blksz = blocksize;
-
+  
   // In an empty fs, there will be just the superblock,
   // the root iNode and the head of the free pages list.
 	neue->freeblks = blks-3;
