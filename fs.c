@@ -9,6 +9,13 @@
 
 /************************ BEGIN - NOT LISTED ************************/
 
+/* On each link of the head of the free pages list,
+ *   there will be at most [max_nodes_per_link] nodes. */
+int max_nodes_per_link;
+
+static int lock;
+
+
 long file_length(const char *filename)
 {
 	struct stat st;
@@ -54,11 +61,8 @@ void initfs_inode(struct superblock *sb)
 	
 }
 
-static int lock;
 
 
-//<<<<<<< HEAD comentei tudo para ser compilavel, o make nao rodava sem esse head e esse numero estranho estarem comentados
-//=======
 /* This method reads the free pages list from the file */
 void read_freepage_list(struct superblock *sb, const char *fname)
 {
@@ -70,9 +74,7 @@ void read_freepage_list(struct superblock *sb, const char *fname)
   close(fd);
 }
 
-//>>>>>>> 68cd9df18bbdedf134cfe58bf97483993f28737e
 /************************ END - NOT LISTED ************************/
-
 
 
 
@@ -116,21 +118,24 @@ struct superblock * fs_format(const char *fname, uint64_t blocksize)
 	neue->magic = 0xdcc605f5;
 	neue->blks = blks;
 	neue->blksz = blocksize;
-	neue->freeblks = blks;
-	neue->freelist = 1;
-	neue->root = freelistsz+1;
-	neue->fd = 0;
 
+  // In an empty fs, there will be just the superblock,
+  // the root iNode and the head of the free pages list.
+	neue->freeblks = blks-3;
+	neue->freelist = 1;
+	neue->root = 2;
+	neue->fd = 0;
+  
 	neue->fd = open(fname, O_WRONLY, S_IWRITE | S_IREAD);
 	
 	if(neue->fd==-1)
 	{
 		// Since open already set errno, I just return here.
-		return;
+		return NULL;
 	}
 	
 	/* Initializing everything on [fname] */
-	/* DON'T CHANGE THIS FUCKING ORDER - Because of the buffer */
+  /* Don't change the order of the inits - Because of the buffer */
 	initfs_superblock(neue);
 	initfs_freepages(neue);
 	initfs_inode(neue);
