@@ -462,7 +462,7 @@ int fs_unlink(struct superblock *sb, const char *fname)
   fs_put_block(sb, in.meta);
   while(true)
   {
-    int next = in.next;
+    uint64_t next = in.next;
     fs_put_block(sb, index);
     if(next==0) break;
     index=next;
