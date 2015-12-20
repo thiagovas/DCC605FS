@@ -149,14 +149,12 @@ struct superblock * fs_open(const char *fname)
     int fd;
     fd = open(fname, O_RDWR, S_IWRITE | S_IREAD);
     if((lock = flock(fd, LOCK_NB | LOCK_EX)) == -1) {
-    close(fd);
+    close(fd); //deleta ou nao? ver mais pra frente
     errno = EBUSY;
     return 0;
     }
     struct superblock* retblock = (struct superblock*) malloc(sizeof(struct superblock*));
     if(read(fd, &retblock->magic, sizeof(uint64_t)) == -1){
-        errno = EBADF;
-        close(fd);
         return 0;
     }
     else if(retblock->magic != 0xdcc605f5){
@@ -165,19 +163,19 @@ struct superblock * fs_open(const char *fname)
         return 0;
     }
     if(read(fd, &retblock->blks, sizeof(uint64_t)) == -1){
-    return;
+    	return;
     }
     if(read(fd, &retblock->blksz, sizeof(uint64_t)) == -1){
-    return;
+    	return;
     }
     if(read(fd, &retblock->freeblks, sizeof(uint64_t)) == -1){
-    return;
+    	return;
     }
     if(read(fd, &retblock->freelist, sizeof(uint64_t)) == -1){
-    return;
+    	return;
     }
     if(read(fd, &retblock->root, sizeof(uint64_t)) == -1){
-    return;
+    	return;
     }
     retblock->fd = fd;
     return retblock;
@@ -203,7 +201,41 @@ int fs_close(struct superblock *sb)
  * is returned.  If an error occurs, (uint64_t)-1 is returned and errno is set
  * appropriately. */
 uint64_t fs_get_block(struct superblock *sb)
-{}
+{
+    //free blocks check
+    if(sb->freelist == 0){
+    errno = ENOSPC;
+    return 0;
+    }
+
+    //file descriptor check
+    if(sb->magic != 0xdcc605f5){
+    errno = EBADF;
+    return -1;
+    }
+
+    struct freepage *page = (struct freepage*)malloc(sb->blksz);
+    if(!freelist) {
+    	perror(NULL);
+        exit(EXIT_FAILURE);
+    }
+
+    //set the read position
+    lseek(sb->fd, sb->freelist * sb->blksz, SEEK_SET);
+
+    //get free block
+    read(sb->fd, page, sb->blksz);
+    uint64_t blknumber = sb->freelist;
+    sb->freelist = page->next;
+    sb->freeblks--;
+
+    //refresh superblock values
+    lseek(sb->fd, 0, SEEK_SET);
+    write(sb->fd, sb, sb->blksz);
+
+    free(page);
+    return blknumber;
+}
 
 
 /* Put =block back into the filesystem as a free block.  Returns zero on
