@@ -45,7 +45,7 @@ void initfs_superblock(struct superblock *sb)
 // Set the freepages
 void initfs_freepages(struct superblock *sb)
 {
-	int ret = 0, zero=0;
+	int ret = 0;
 	uint64_t i = sb->freelist;
   
   struct freepage* fp = (struct freepage*) malloc(sizeof(struct freepage*));
@@ -64,22 +64,22 @@ void initfs_inode(struct superblock *sb)
 {
   int ret=0;
 
-  struct nodeinfo *ni = (struct nodeinfo*) malloc(sizeof(struct nodeinfo*));
+  struct nodeinfo *ni = (struct nodeinfo*) malloc(sb->blksz);
   /* Root - NodeInfo */
   ni->size = 0;
   strcpy(ni->name, "/\0");
+  //ni->name[0] = '/';
+  //ni->name[1] = '\0';
   ret = write(sb->fd, ni, sb->blksz);
   free(ni);
   
-  struct inode *in = (struct inode*) malloc(sizeof(struct inode*));
+  struct inode *in = (struct inode*) malloc(sb->blksz);
   /* Root - iNode */
   in->mode = IMDIR;
-  in->parent = 0;
+  in->parent = in->next = 0;
   in->meta = 2;
-  in->next = 0;
-  ret = write(sb->fd, in, sb->blksz); // next
-  free(in);
-    
+  ret = write(sb->fd, in, sb->blksz);
+  free(in); 
 }
 /************************ END - NOT LISTED ************************/
 

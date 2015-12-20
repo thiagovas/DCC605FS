@@ -2,14 +2,12 @@ CC=gcc
 NUM_TESTS=1
 
 
-build: fs tests
+build:
+	$(foreach var,$(NUM_TESTS),$(CC) test$(var).c fs.c -o test$(var) -O -Wall;)
 
 
-tests:
-	$(foreach var,$(NUM_TESTS),$(CC) test$(var).c fs.o -o test$(var) -O -Wall;)
-
-fs:
-	$(CC) -c fs.c -o fs.o -O2 -Wall
+debug:
+	$(foreach var,$(NUM_TESTS),$(CC) test$(var).c fs.c -o test$(var) -O -Wall -g;)
 
 clean:
 	rm -f main
