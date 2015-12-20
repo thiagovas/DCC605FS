@@ -131,6 +131,21 @@ uint64_t find_inode(struct superblock *sb, char *fname)
   return -1;
 }
 
+struct nodeinfo * get_node_info(struct superblock *sb, uint64_t index)
+{
+
+  struct inode* node = (struct inode*)malloc(sb->blksz);
+  struct nodeinfo* info = (struct nodeinfo*)malloc(sb->blksz);
+
+  lseek(sb->fd, (index * sb->blksz), SEEK_SET);
+  read(sb->fd, node, sb->blksz);
+  lseek(sb->fd, (node->meta * sb->blksz), SEEK_SET);
+  read(sb->fd, info, sb->blksz);
+  free(node);
+
+  return info;
+}
+
 /************************ END - NOT LISTED ************************/
 
 
