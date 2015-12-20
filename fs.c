@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <errno.h>
+#include <stdio.h>
 #include <fcntl.h>
 #include "fs.h"
 
@@ -39,41 +40,49 @@ void initfs_superblock(struct superblock *sb)
 	ret=write(sb->fd, &sb->freelist, sizeof(uint64_t));
 	ret=write(sb->fd, &sb->root, sizeof(uint64_t));
 	ret=write(sb->fd, &sb->fd, sizeof(uint64_t));
+  
+  ret=write(sb->fd, 0, sb->blksz-8*sizeof(uint64_t)); // Empty on the rest of the block
 }
 
 // Set the freepages
 void initfs_freepages(struct superblock *sb)
 {
-	int ret = 0, value=0;
-	uint64_t i = 4;
+	int ret = 0, zero=0;
+	uint64_t i = 3;
   
-  /* This variable keeps the maximum number of blocks the list of links can keep. */
-  uint64_t freepage_max_count = (sb->blksz-2*sizeof(uint64_t))/sizeof(uint64_t);
-  
-  while(i < sb->blks)
+  for(i=3; i < sb->blks. i++)
   {
-    uint64_t to_be_written = MIN(freepage_max_count, sb->blks);
-    
     // Next
-    if(to_be_written <= freepage_max_count) value = i+to_be_written;
-    else value=0;
-    
+    uint64_t value=i+1;
+    if(i == sb->blks-1) value = 0;
     ret=write(sb->fd, &value, sizeof(uint64_t));
     
-    // Count
-    ret = write(sb->fd, &to_be_written, sizeof(uint64_t));
     
-    
-    // Links
-    for(; to_be_written > 0; i++, to_be_written--)
-      ret = write(sb->fd, &i, sizeof(uint64_t));
+    // Rest
+    ret=write(sb->fd, &zero, sb->blksz-sizeof(uint64_t));
   }
 }
+
 
 // Set the root directory
 void initfs_inode(struct superblock *sb)
 {
-	
+  int ret=0;
+  
+  /* Root - NodeInfo */
+  ret = write(sb->fd, 0, sizeof(uint64_t)); //size
+  ret = write(sb->fd, 0, 7*sizeof(uint64_t)); // reserved
+  ret = write(sb->fd, '/', sizeof(char)); // name
+  ret = write(sb->fd, 0, sb->blksz-8*sizeof(uint64_t)-sizeof(char));
+  
+  
+  /* Root - iNode */
+  ret = write(sb->fd, IMDIR, sizeof(uint64_t)); // mode
+  ret = write(sb->fd, 0, sizeof(uint64_t)); // parent
+  ret = write(sb->fd, 2, sizeof(uint64_t)); // meta
+  ret = write(sb->fd, 0, sizeof(uint64_t)); // next
+  ret = write(sb->fd, 0, sb->blksz-4*sizeof(uint64_t)); // Rest - Links - Everything Empty
+
 }
 /************************ END - NOT LISTED ************************/
 
@@ -118,24 +127,21 @@ struct superblock * fs_format(const char *fname, uint64_t blocksize)
   
   // In an empty fs, there will be just the superblock,
   // the root iNode and the head of the free pages list.
-	neue->freeblks = blks-3;
-	neue->freelist = 1;
+	neue->freeblks = blks-4;
+	neue->freelist = 3;
 	neue->root = 2;
-	neue->fd = 0;
-  
-	neue->fd = open(fname, O_WRONLY, S_IWRITE | S_IREAD);
-	
-	if(neue->fd==-1)
+	neue->fd = open(fname, O_WRONLY, S_IWRITE | S_IREAD);	
+	if(neue->fd == -1)
 	{
-		// Since open already set errno, I just return here.
+		// Since open already set errno, I just return NULL here.
 		return NULL;
 	}
 	
 	/* Initializing everything on [fname] */
   /* Don't change the order of the inits - Because of the buffer */
 	initfs_superblock(neue);
-	initfs_freepages(neue);
 	initfs_inode(neue);
+	initfs_freepages(neue);
 	
 	return neue;
 }
@@ -149,18 +155,18 @@ struct superblock * fs_open(const char *fname)
     int fd;
     fd = open(fname, O_RDWR, S_IWRITE | S_IREAD);
     if((lock = flock(fd, LOCK_NB | LOCK_EX)) == -1) {
-    close(fd); //deleta ou nao? ver mais pra frente
-    errno = EBUSY;
-    return 0;
+      close(fd); //deleta ou nao? ver mais pra frente
+      errno = EBUSY;
+      return NULL;
     }
     struct superblock* retblock = (struct superblock*) malloc(sizeof(struct superblock*));
     if(read(fd, &retblock->magic, sizeof(uint64_t)) == -1){
-        return 0;
+        return NULL;
     }
     else if(retblock->magic != 0xdcc605f5){
-        errno=EBADF;
         close(fd);
-        return 0;
+        errno=EBADF;
+        return NULL;
     }
     if(read(fd, &retblock->blks, sizeof(uint64_t)) == -1){
     	return;
@@ -204,20 +210,20 @@ uint64_t fs_get_block(struct superblock *sb)
 {
     //free blocks check
     if(sb->freelist == 0){
-    errno = ENOSPC;
-    return 0;
+      errno = ENOSPC;
+      return 0;
     }
 
     //file descriptor check
     if(sb->magic != 0xdcc605f5){
-    errno = EBADF;
-    return -1;
+      errno = EBADF;
+      return -1;
     }
 
     struct freepage *page = (struct freepage*)malloc(sb->blksz);
     if(!freelist) {
     	perror(NULL);
-        exit(EXIT_FAILURE);
+      exit(EXIT_FAILURE);
     }
 
     //set the read position
@@ -248,7 +254,7 @@ int fs_put_block(struct superblock *sb, uint64_t block)
 int fs_write_file(struct superblock *sb, const char *fname, char *buf,
                   size_t cnt)
 {
-
+  
 }
 
 
