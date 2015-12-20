@@ -131,6 +131,66 @@ uint64_t find_inode(struct superblock *sb, char *fname)
   return -1;
 }
 
+
+void remove_links(struct superblock *sb, int index)
+{
+  uint64_t *visited = (uint64_t*) calloc(sb->blks, sizeof(uint64_t));
+  uint64_t *queue = (uint64_t*) calloc(sb->blks, sizeof(uint64_t));
+  int queue_head, queue_tail, ret;
+  
+  queue_head = queue_tail = 0;
+  memset(visited, 0, sb->blks);
+  memset(queue, 0, sb->blks);
+  queue[queue_tail++] = sb->root;
+  visited[sb->root] = 1;
+  
+  struct inode in;
+  struct inode parent;
+  while(queue_head < queue_tail)
+  {
+    lseek(sb->fd, queue[queue_head]*sb->blksz, SEEK_SET);
+    ret=read(sb->fd, &in, sb->blksz);
+    if(in.mode == IMCHILD)
+    {
+      lseek(sb->fd, in.parent*sb->blksz, SEEK_SET);
+      ret=read(sb->fd, &parent, sb->blksz);
+      if(parent.mode == IMREG)
+      {
+        queue_head++;
+        continue;
+      }
+    }
+    else parent = in;
+    
+    struct nodeinfo ni;
+    lseek(sb->fd, parent.meta*sb->blksz, SEEK_SET);
+    ret=read(sb->fd, &ni, sb->blksz);
+    
+    int i=0;
+    if(in.mode == IMDIR)
+      for(; i < ni.size; i++)
+      {
+        if(in.links[i] == index)
+        {
+          int j=i+1;
+          while(j < ni.size)
+            in.links[j-1]=in.links[j++];
+          ni.size-=1;
+          i--;
+          lseek(sb->fd, parent.meta*sb->blksz, SEEK_SET);
+          ret=write(sb->fd, &ni, sb->blksz);
+          lseek(sb->fd, queue[queue_head]*sb->blksz, SEEK_SET);
+          ret=write(sb->fd, &in, sb->blksz);
+        }
+        else if(visited[in.links[i]]==0)
+        {
+          visited[in.links[i]] = 1;
+          queue[queue_tail++] = in.links[i];
+        }
+      }
+  } 
+}
+
 /************************ END - NOT LISTED ************************/
 
 
@@ -379,12 +439,7 @@ int fs_unlink(struct superblock *sb, const char *fname)
     return -1;
   }
   
-  struct inode in;
-  lseek(sb->fd, index*sb->blksz, SEEK_SET);
-  ret=read(sb->fd, &in, sb->blksz);
-  do {
-    
-  }while(in.next==0);
+  remove_links(sb, index);
 }
 
 
@@ -401,7 +456,7 @@ int fs_mkdir(struct superblock *sb, const char *dname)
   {
     errno = EEXIST;
     return -1;
-  } 
+  }
   
   
   
