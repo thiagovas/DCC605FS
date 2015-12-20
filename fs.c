@@ -29,6 +29,12 @@ long file_length(const char *filename)
 	return st.st_size;
 }
 
+void SB_refresh(struct superblock *sb)
+{
+    lseek(sb->fd, 0, SEEK_SET);
+    write(sb->fd, sb, sb->blksz);
+}
+
 // Set the superblock
 void initfs_superblock(struct superblock *sb)
 {
@@ -197,7 +203,7 @@ int fs_close(struct superblock *sb)
     lock = flock(sb->fd, LOCK_UN);
     int ret = close(sb->fd);
     if(ret == -1){
-    free(sb);
+      free(sb);
     }
 }
 
@@ -208,47 +214,68 @@ int fs_close(struct superblock *sb)
  * appropriately. */
 uint64_t fs_get_block(struct superblock *sb)
 {
-    //free blocks check
-    if(sb->freelist == 0){
-      errno = ENOSPC;
-      return 0;
-    }
+  //free blocks check
+  if(sb->freeblks == 0){
+    errno = ENOSPC;
+    return NULL;
+  }
+  //file descriptor check
+  if(sb->magic != 0xdcc605f5){
+    errno = EBADF;
+    return -1;
+  }
 
-    //file descriptor check
-    if(sb->magic != 0xdcc605f5){
-      errno = EBADF;
-      return -1;
-    }
+  struct freepage *page = (struct freepage*)malloc(sb->blksz);
+  if(!page) {
+    perror(NULL);
+    exit(EXIT_FAILURE);
+  }
 
-    struct freepage *page = (struct freepage*)malloc(sb->blksz);
-    if(!freelist) {
-    	perror(NULL);
-      exit(EXIT_FAILURE);
-    }
+  //set the read position
+  lseek(sb->fd, sb->freelist * sb->blksz, SEEK_SET);
 
-    //set the read position
-    lseek(sb->fd, sb->freelist * sb->blksz, SEEK_SET);
+  //get free block
+  read(sb->fd, page, sb->blksz);
+  uint64_t blknumber = sb->freelist;
+  sb->freelist = page->next;
+  sb->freeblks--;
 
-    //get free block
-    read(sb->fd, page, sb->blksz);
-    uint64_t blknumber = sb->freelist;
-    sb->freelist = page->next;
-    sb->freeblks--;
+  //refresh superblock values
+  SB_refresh(sb);
 
-    //refresh superblock values
-    lseek(sb->fd, 0, SEEK_SET);
-    write(sb->fd, sb, sb->blksz);
-
-    free(page);
-    return blknumber;
+  free(page);
+  return blknumber;
 }
-
 
 /* Put =block back into the filesystem as a free block.  Returns zero on
  * success or a negative value on error.  If there is an error, errno is set
  * accordingly. */
 int fs_put_block(struct superblock *sb, uint64_t block)
-{}
+{
+    if(sb->magic != 0xdcc605f5){
+        errno = EBADF;
+        return -1;
+    }
+
+    struct freepage *pagefreed = (struct freepage*)malloc(sb->blksz);
+    if(!pagefreed) {
+        perror(NULL);
+        exit(EXIT_FAILURE);
+	  }
+
+    //set list pointers
+    pagefreed->next = sb->freelist;
+    sb->freelist = block;
+    sb->freeblks++;
+
+    //refresh superblock values
+    SB_refresh(sb);
+
+    //insert block in the pile
+    //refresh superblock values
+    lseek(sb->fd, block * sb->blksz, SEEK_SET);
+    write(sb->fd, pagefreed, sb->blksz);
+}
 
 
 int fs_write_file(struct superblock *sb, const char *fname, char *buf,
