@@ -424,7 +424,6 @@ int fs_write_file(struct superblock *sb, const char *fname, char *buf,
   uint64_t index=0;
   if((index=find_inode(sb, fname)) > 0) fs_unlink(sb, fname);
   
-  
 }
 
 
@@ -444,10 +443,7 @@ ssize_t fs_read_file(struct superblock *sb, const char *fname, char *buf,
     errno = ENOENT;
     return -1;
   }
-  
-  
-  
-  
+   
 }
 
 
@@ -495,7 +491,7 @@ int fs_mkdir(struct superblock *sb, const char *dname)
   }
 
   uint64_t index=0;
-  if((index-find_inode(sb, dname)) > 0)
+  if((index=find_inode(sb, dname)) > 0)
   {
     errno = EEXIST;
     return -1;
