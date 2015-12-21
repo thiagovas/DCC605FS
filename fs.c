@@ -207,6 +207,18 @@ struct nodeinfo * get_node_info(struct superblock *sb, uint64_t index)
   return info;
 }
 
+uint64_t get_node_index(struct superblock *sb, uint64_t index)
+{
+  struct inode* node = (struct inode*)malloc(sb->blksz);
+
+  lseek(sb->fd, (index * sb->blksz), SEEK_SET);
+  read(sb->fd, node, sb->blksz);
+  free(node);
+
+  return node->meta;
+}
+
+
 /************************ END - NOT LISTED ************************/
 
 
@@ -494,6 +506,12 @@ int fs_mkdir(struct superblock *sb, const char *dname)
 
 int fs_rmdir(struct superblock *sb, const char *dname)
 {
+
+  if(sb->magic != 0xdcc605f5){
+    errno = EBADF;
+    return -1;
+  }
+
   if(strlen(dname) > MAX_FNAME(sb->blksz))
   {
     errno = ENAMETOOLONG;
@@ -501,18 +519,43 @@ int fs_rmdir(struct superblock *sb, const char *dname)
   }
 
   uint64_t index=0;
-  if((index=find_inode(sb, dname)) < 0) 
+  if((index=find_inode(sb, dname)) < 0)
   {
     errno = ENOENT;
     return -1;
   }
-  
-  
-  
-  
-  
-    
+
+  struct nodeinfo * info = (struct nodeinfo*)malloc(sb->blksz);
+  struct inode * node = (struct inode*)malloc(sb->blksz);
+
+  lseek(sb->fd, index * sb->blksz, SEEK_SET);
+  int ret = read(sb->fd, node, sb->blksz);
+
+  info = get_node_info(sb, index);
+
+  if(info->size == 0){
+
+  uint64_t index_info = get_node_index(sb, index);
+  fs_put_block(sb, index_info);
+
+    while(1)
+    {
+        int next = node->next;
+        fs_put_block(sb, index);
+        if(next==0) break;
+        index = node->next;
+        lseek(sb->fd, index*sb->blksz, SEEK_SET);
+        ret=read(sb->fd, node, sb->blksz);
+    }
+  }
+  else
+  {
+    errno = ENOTEMPTY;
+    return -1;
+  }
+  return 0;
 }
+
 
 
 
