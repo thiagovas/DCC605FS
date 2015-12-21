@@ -3,11 +3,11 @@ NUM_TESTS=1
 
 
 build:
-	$(foreach var,$(NUM_TESTS),$(CC) test$(var).c fs.c -o test$(var) -O -Wall;)
+	$(foreach var,$(NUM_TESTS),$(CC) test$(var).c fs.c -o test$(var) -O;)
 
 
 debug:
-	$(foreach var,$(NUM_TESTS),$(CC) test$(var).c fs.c -o test$(var) -O -Wall -g;)
+	$(foreach var,$(NUM_TESTS),$(CC) test$(var).c fs.c -o test$(var) -O -g;)
 
 clean:
 	rm -f main

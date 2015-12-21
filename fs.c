@@ -84,7 +84,7 @@ void initfs_inode(struct superblock *sb)
 /* This function returns the block index if there is an inode that is named [fname]
  *  it returns -1 otehrwise.
  */
-uint64_t find_inode(struct superblock *sb, char *fname)
+uint64_t find_inode(struct superblock *sb, const char *fname)
 {
   uint64_t *visited = (uint64_t*) calloc(sb->blks, sizeof(uint64_t));
   uint64_t *queue = (uint64_t*) calloc(sb->blks, sizeof(uint64_t));
@@ -212,7 +212,7 @@ uint64_t get_node_index(struct superblock *sb, uint64_t index)
   struct inode* node = (struct inode*)malloc(sb->blksz);
 
   lseek(sb->fd, (index * sb->blksz), SEEK_SET);
-  read(sb->fd, node, sb->blksz);
+  int ret=read(sb->fd, node, sb->blksz);
   free(node);
 
   return node->meta;
@@ -424,6 +424,7 @@ int fs_write_file(struct superblock *sb, const char *fname, char *buf,
   uint64_t index=0;
   if((index=find_inode(sb, fname)) > 0) fs_unlink(sb, fname);
   
+  return 0;
 }
 
 
@@ -435,15 +436,15 @@ ssize_t fs_read_file(struct superblock *sb, const char *fname, char *buf,
     errno = ENAMETOOLONG;
     return -1;
   }
-  
-  
+   
   uint64_t index=0;
   if((index=find_inode(sb, fname)) < 0)
   {
     errno = ENOENT;
     return -1;
   }
-   
+  
+  return 0;
 }
 
 
@@ -654,76 +655,73 @@ char * fs_list_dir(struct superblock *sb, const char *dname)
 {
   if(sb->magic != 0xdcc605f5){
     errno = EBADF;
-    return -1;
+    return NULL;
   }
 
   if(strlen(dname) > MAX_FNAME(sb->blksz))
   {
     errno = ENAMETOOLONG;
-    return -1;
+    return NULL;
   }
 
   uint64_t index=0;
   if((index=find_inode(sb, dname)) < 0)
   {
     errno = ENOENT;
-    return -1;
+    return NULL;
   }
-    int filenumber, fileindex;
-    int lim = (sb->blksz - 4*sizeof(uint64_t))/sizeof(uint64_t);
-    char *names;
-    struct inode *node = (struct inode*)malloc(sb->blksz);
-    struct nodeinfo *info = (struct nodeinfo*)malloc(sb->blksz);
-    names = (char *)malloc(sizeof(char));
+  
+  int filenumber, fileindex;
+  int lim = (sb->blksz - 4*sizeof(uint64_t))/sizeof(uint64_t);
+  char *names;
+  struct inode *node = (struct inode*)malloc(sb->blksz);
+  struct nodeinfo *info = (struct nodeinfo*)malloc(sb->blksz);
+  names = (char*)malloc(2*sizeof(char));
+  
+  lseek(sb->fd, index * sb->blksz, SEEK_SET);
+  int ret=read(sb->fd, node, sb->blksz);
+  info = get_node_info(sb, index);
 
-    lseek(sb->fd, index * sb->blksz, SEEK_SET);
-    read(sb->fd, node, sb->blksz);
-    info = get_node_info(sb, index);
-
-    if(node->mode == IMDIR){
-        while(1)
-        {
-        int next = node->next;
-        for(filenumber = 0; filenumber < info->size; filenumber++){
-            struct nodeinfo *infofile = (struct nodeinfo*)malloc(sb->blksz);
-            struct inode *nodefile = (struct inode*)malloc(sb->blksz);
-            fileindex = node->links[filenumber];
-            if(filenumber ==  lim){
-            break;
-            }
-            lseek(sb->blksz, fileindex * sb->blksz, SEEK_SET);
-            read(sb->fd, nodefile, sb->blksz);
-            infofile = get_node_info(sb,fileindex);
-            if(nodefile->mode == IMDIR){
-                if(strlen(names) == 0){
-                    strcpy(names, infofile->name);
-                    strcat(names, "/");
-                }
-                else{
-                    strcat(names, infofile->name);
-                    strcat(names, "/");
-                }
-            }
-            else{
-                if(strlen(names) == 0){
-                    strcpy(names, infofile->name);
-                }
-                else{
-                    strcat(names, infofile->name);
-                }
-            }
-            free(infofile);
-            free(nodefile);
-        }
-        if(next==0) break;
-        index = node->next;
-        lseek(sb->fd, index*sb->blksz, SEEK_SET);
-        read(sb->fd, node, sb->blksz);
-        }
+  if(node->mode == IMDIR){
+      while(1)
+      {
+      int next = node->next;
+      for(filenumber = 0; filenumber < info->size; filenumber++){
+          struct nodeinfo *infofile = (struct nodeinfo*)malloc(sb->blksz);
+          struct inode *nodefile = (struct inode*)malloc(sb->blksz);
+          fileindex = node->links[filenumber];
+          if(filenumber ==  lim){
+          break;
+          }
+          lseek(sb->blksz, fileindex * sb->blksz, SEEK_SET);
+          ret=read(sb->fd, nodefile, sb->blksz);
+          infofile = get_node_info(sb,fileindex);
+          if(nodefile->mode == IMDIR){
+              if(strlen(names) == 0){
+                  strcpy(names, infofile->name);
+                  strcat(names, "/");
+              }
+              else{
+                  strcat(names, infofile->name);
+                  strcat(names, "/");
+              }
+          }
+          else{
+              if(strlen(names) == 0){
+                  strcpy(names, infofile->name);
+              }
+              else{
+                  strcat(names, infofile->name);
+              }
+          }
+          free(infofile);
+          free(nodefile);
+      }
+      if(next==0) break;
+      index = node->next;
+      lseek(sb->fd, index*sb->blksz, SEEK_SET);
+      ret=read(sb->fd, node, sb->blksz);
     }
-    return names;
+  }
+  return names;
 }
-
-
-
-
