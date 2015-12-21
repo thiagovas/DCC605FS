@@ -484,12 +484,18 @@ int fs_unlink(struct superblock *sb, const char *fname)
 
 int fs_mkdir(struct superblock *sb, const char *dname)
 {
+  if(sb->magic != 0xdcc605f5){
+    errno = EBADF;
+    return -1;
+  }
+  
   if(strlen(dname) > MAX_FNAME(sb->blksz))
   {
     errno = ENAMETOOLONG;
     return -1;
   }
 
+  int ret=0;
   uint64_t index=0;
   if((index=find_inode(sb, dname)) > 0)
   {
@@ -497,10 +503,95 @@ int fs_mkdir(struct superblock *sb, const char *dname)
     return -1;
   }
   
+  int i=strlen(dname);
+  for(i--; i >=0; i--)
+    if(dname[i] == '/') break;
   
   
+  char *temp = (char*) malloc(sizeof(char)*MAX_FNAME(sb->blksz));
+  memcpy(temp, dname, i+1);
+  temp[i+1] = '\0';
   
+  index=find_inode(sb, temp);
+  if(index < 0)
+  {
+    // In case the parent directory doesnt exist...
+    errno = ENOENT;
+    return -1;
+  }
   
+  struct inode in;
+  lseek(sb->fd, index*sb->blksz, SEEK_SET);
+  ret=read(sb->fd, &in, sb->blksz);
+  
+  int lim = (sb->blksz-4*sizeof(uint64_t))/sizeof(uint64_t);
+  
+  struct nodeinfo *ni = (struct nodeinfo*) malloc(sb->blksz);
+  struct inode *neue = (struct inode*) malloc(sb->blksz);
+  uint64_t ni_index = fs_get_block(sb);
+  uint64_t in_index = fs_get_block(sb);
+  if(ni_index < 0 || in_index < 0)
+  {
+    // No Space
+    errno = ENOSPC;
+    return -1;
+  }
+  neue->meta = ni_index;
+  neue->next = 0;
+  neue->mode = IMDIR;
+  neue->parent = index;
+  strcpy(ni->name, dname);
+  ni->size=0;
+  
+  while(true)
+  {
+    int j=0;
+    for(;j < lim; j++)
+    {
+      if(in.links[j] == 0)
+      {
+        index=fs_get_block(sb);
+        in.links[j] = ni_index;
+        lseek(sb->fd, index*sb->blksz, SEEK_SET);
+        ret=write(sb->fd, neue, sb->blksz);
+        goto finishhim;
+      }
+    }
+    
+    if(in.next == 0)
+    {
+      struct inode *cont  = (struct inode*) malloc(sb->blksz);
+      cont->meta = in.meta;
+      cont->mode = IMCHILD;
+      cont->links[0] = ni_index;
+      cont->parent = index;
+      cont->next=0;
+      int new_cont = fs_get_block(sb);
+      if(new_cont < 0)
+      {
+        //No Space
+        errno = ENOSPC;
+        return -1;
+      }
+      lseek(sb->fd, new_cont*sb->blksz, SEEK_SET);
+      ret = write(sb->fd, cont, sb->blksz);
+      goto finishhim;
+    }
+    else
+    {
+      lseek(sb->fd, in.next*sb->blksz, SEEK_SET);
+      ret = read(sb->fd, &in, sb->blksz);
+    }
+  }
+  
+  finishhim:
+  lseek(sb->fd, ni_index*sb->blksz, SEEK_SET);
+  ret=write(sb->fd, neue, sb->blksz);
+  lseek(sb->fd, in_index, sb->blksz);
+  ret=write(sb->fd, ni, sb->blksz);
+  free(ni);
+  free(neue);
+  return 0;
 }
 
 
