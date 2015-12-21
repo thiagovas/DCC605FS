@@ -652,6 +652,11 @@ int fs_rmdir(struct superblock *sb, const char *dname)
 
 char * fs_list_dir(struct superblock *sb, const char *dname)
 {
+  if(sb->magic != 0xdcc605f5){
+    errno = EBADF;
+    return -1;
+  }
+
   if(strlen(dname) > MAX_FNAME(sb->blksz))
   {
     errno = ENAMETOOLONG;
@@ -664,14 +669,59 @@ char * fs_list_dir(struct superblock *sb, const char *dname)
     errno = ENOENT;
     return -1;
   }
-  
-  
-  
-  
-  
-  
-  
-  
+    int filenumber, fileindex;
+    int lim = (sb->blksz - 4*sizeof(uint64_t))/sizeof(uint64_t);
+    char *names;
+    struct inode *node = (struct inode*)malloc(sb->blksz);
+    struct nodeinfo *info = (struct nodeinfo*)malloc(sb->blksz);
+    names = (char *)malloc(sizeof(char));
+
+    lseek(sb->fd, index * sb->blksz, SEEK_SET);
+    read(sb->fd, node, sb->blksz);
+    info = get_node_info(sb, index);
+
+    if(node->mode == IMDIR){
+        while(1)
+        {
+        int next = node->next;
+        for(filenumber = 0; filenumber < info->size; filenumber++){
+            struct nodeinfo *infofile = (struct nodeinfo*)malloc(sb->blksz);
+            struct inode *nodefile = (struct inode*)malloc(sb->blksz);
+            fileindex = node->links[filenumber];
+            if(filenumber ==  lim){
+            break;
+            }
+            lseek(sb->blksz, fileindex * sb->blksz, SEEK_SET);
+            read(sb->fd, nodefile, sb->blksz);
+            infofile = get_node_info(sb,fileindex);
+            if(nodefile->mode == IMDIR){
+                if(strlen(names) == 0){
+                    strcpy(names, infofile->name);
+                    strcat(names, "/");
+                }
+                else{
+                    strcat(names, infofile->name);
+                    strcat(names, "/");
+                }
+            }
+            else{
+                if(strlen(names) == 0){
+                    strcpy(names, infofile->name);
+                }
+                else{
+                    strcat(names, infofile->name);
+                }
+            }
+            free(infofile);
+            free(nodefile);
+        }
+        if(next==0) break;
+        index = node->next;
+        lseek(sb->fd, index*sb->blksz, SEEK_SET);
+        read(sb->fd, node, sb->blksz);
+        }
+    }
+    return names;
 }
 
 
